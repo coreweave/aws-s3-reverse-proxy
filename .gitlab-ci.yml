@@ -12,7 +12,7 @@ stages:
   - release
 
 variables:
-  DOCKER_IMAGE: aws-s3-reverse-proxy
+  DOCKER_IMG: aws-s3-reverse-proxy
   FIXED_IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
 
 .go-cache:
@@ -78,7 +78,7 @@ publish:release:
   dependencies:
     - build:release
   variables:
-    IMAGE_NAME: ${DOCKER_IMAGE}
+    IMAGE_NAME: ${DOCKER_IMG}
     REF_IMAGE: $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_REF_SLUG
     FIXED_IMAGE: $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
     DOCKERFILE: ${CI_PROJECT_DIR}/Dockerfile
