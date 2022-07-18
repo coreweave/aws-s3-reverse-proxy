@@ -32,6 +32,8 @@ test:
     key: bin-${CI_COMMIT_REF_SLUG}
     paths:
       - bin/
+  before_script:
+    - apk add make bash curl gcc libc-dev git
   script:
     - go test ./... -coverprofile cover.out
 
