@@ -76,7 +76,7 @@ publish:release:
     refs:
       - coreweave
   dependencies:
-    - build:release
+    - tag:release
   variables:
     IMAGE_NAME: ${DOCKER_IMG}
     REF_IMAGE: $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_REF_SLUG
