@@ -12,7 +12,8 @@ stages:
   - release
 
 variables:
-  CONTROLLER_FIXED_IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
+  DOCKER_IMAGE: aws-s3-reverse-proxy
+  FIXED_IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
 
 .go-cache:
   variables:
@@ -37,7 +38,6 @@ test:
 build:image:
   stage: build
   variables:
-    DOCKER_IMG: ${CONTROLLER_IMAGE}
     REF_IMAGE: $CI_REGISTRY_IMAGE/$DOCKER_IMG:$CI_COMMIT_REF_SLUG
     FIXED_IMAGE: $CI_REGISTRY_IMAGE/$DOCKER_IMG:$CI_COMMIT_SHORT_SHA
     DOCKERFILE: ${CI_PROJECT_DIR}/Dockerfile
@@ -78,10 +78,10 @@ publish:release:
   dependencies:
     - build:release
   variables:
-    IMAGE_NAME: {{.}}
+    IMAGE_NAME: ${DOCKER_IMAGE}
     REF_IMAGE: $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_REF_SLUG
     FIXED_IMAGE: $CI_REGISTRY_IMAGE/$IMAGE_NAME:$CI_COMMIT_SHORT_SHA
-    DOCKERFILE: {{$ciImagesDir}}/{{.}}/Dockerfile
+    DOCKERFILE: ${CI_PROJECT_DIR}/Dockerfile
   image:
     name: registry.gitlab.com/coreweave/utility-images/crane/debug:temp
     entrypoint: ["/busybox/sh"]
