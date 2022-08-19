@@ -7,16 +7,17 @@ import (
 )
 
 type ProxyServer struct {
-	Handler http.Handler
-	Log     *zap.Logger
-	Cert    string
-	Key     string
+	Handler          http.Handler
+	Log              *zap.Logger
+	Cert             string
+	Key              string
+	UpstreamInsecure bool
 }
 
 func (p *ProxyServer) StartServer(wg *sync.WaitGroup) {
 	wg.Add(1)
 	p.startHttp(wg)
-	if p.Cert != "" && p.Key != "" {
+	if !p.UpstreamInsecure {
 		wg.Add(1)
 		p.startHttps(wg)
 	}

@@ -44,10 +44,11 @@ func main() {
 
 	// Server
 	srv := server.ProxyServer{
-		Handler: wrappedHandler,
-		Log:     logger,
-		Cert:    opts.CertFile,
-		Key:     opts.KeyFile,
+		Handler:          wrappedHandler,
+		Log:              logger,
+		Cert:             opts.CertFile,
+		Key:              opts.KeyFile,
+		UpstreamInsecure: opts.UpstreamInsecure,
 	}
 
 	wg := &sync.WaitGroup{}

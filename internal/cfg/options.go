@@ -21,6 +21,7 @@ type Options struct {
 	UpstreamEndpoint    string
 	CertFile            string
 	KeyFile             string
+	DisableSSL          bool
 	ExpireCacheMinutes  int
 	EvictCacheMinutes   int
 	RgwAdminEndpoint    string
@@ -32,6 +33,7 @@ type Options struct {
 func NewOptions() Options {
 	var opts Options
 	kingpin.Flag("debug", "enable debug logging").Default("false").Envar("DEBUG").BoolVar(&opts.Debug)
+	kingpin.Flag("insecure", "enable insecure upstream").Default("false").Envar("INSECURE").BoolVar(&opts.UpstreamInsecure)
 	kingpin.Flag("allowed-source-subnet", "allowed source IP addresses with netmask (env - ALLOWED_SOURCE_SUBNET)").Default("127.0.0.1/32").Envar("ALLOWED_SOURCE_SUBNET").StringsVar(&opts.AllowedSourceSubnet)
 	kingpin.Flag("upstream-endpoint", "use this S3 endpoint for upstream connections, instead of public AWS S3 (env - UPSTREAM_ENDPOINT)").Envar("UPSTREAM_ENDPOINT").StringVar(&opts.UpstreamEndpoint)
 	kingpin.Flag("cert-file", "path to the certificate file (env - CERT_FILE)").Envar("CERT_FILE").Default("").StringVar(&opts.CertFile)

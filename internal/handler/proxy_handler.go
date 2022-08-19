@@ -58,6 +58,7 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 
 	scheme := "https"
 	if opts.UpstreamInsecure {
+		log.Debug("upstream is insecure..setting to http")
 		scheme = "http"
 	}
 
