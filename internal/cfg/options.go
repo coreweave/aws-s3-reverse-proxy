@@ -19,6 +19,7 @@ type Options struct {
 	Region              string
 	UpstreamInsecure    bool
 	UpstreamEndpoint    string
+	UpstreamMatchers    []string
 	CertFile            string
 	KeyFile             string
 	DisableSSL          bool
@@ -36,6 +37,7 @@ func NewOptions() Options {
 	kingpin.Flag("insecure", "enable insecure upstream").Default("false").Envar("INSECURE").BoolVar(&opts.UpstreamInsecure)
 	kingpin.Flag("allowed-source-subnet", "allowed source IP addresses with netmask (env - ALLOWED_SOURCE_SUBNET)").Default("127.0.0.1/32").Envar("ALLOWED_SOURCE_SUBNET").StringsVar(&opts.AllowedSourceSubnet)
 	kingpin.Flag("upstream-endpoint", "use this S3 endpoint for upstream connections, instead of public AWS S3 (env - UPSTREAM_ENDPOINT)").Envar("UPSTREAM_ENDPOINT").StringVar(&opts.UpstreamEndpoint)
+	kingpin.Flag("upstream-matchers", "matcher values").Default("object").StringsVar(&opts.UpstreamMatchers)
 	kingpin.Flag("cert-file", "path to the certificate file (env - CERT_FILE)").Envar("CERT_FILE").Default("").StringVar(&opts.CertFile)
 	kingpin.Flag("key-file", "path to the private key file (env - KEY_FILE)").Envar("KEY_FILE").Default("").StringVar(&opts.KeyFile)
 	kingpin.Flag("cache-expire", "time in minutes to expire the cache").Default("5").IntVar(&opts.ExpireCacheMinutes)

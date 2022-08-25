@@ -29,10 +29,6 @@ func main() {
 		logger.Sugar().Fatalf("unable to build proxy handler: %s", err.Error())
 	}
 
-	if len(proxyHandler.UpstreamEndpoint) == 0 {
-		logger.Fatal("no endpoint provided for upstream")
-	}
-
 	logger.Sugar().Debugf("Sending requests to upstream Object Storage to endpoint %s://%s.", proxyHandler.UpstreamScheme, proxyHandler.UpstreamEndpoint)
 
 	for _, subnet := range proxyHandler.AllowedSourceSubnet {

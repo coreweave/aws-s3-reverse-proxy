@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cfg"
-
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cache"
+	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cfg"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/proxy"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	log "github.com/sirupsen/logrus"
@@ -16,14 +15,21 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 )
 
 var (
 	// Headers
-	authorizationHeader = "Authorization"
-	contentMd5Header    = "Content-Md5"
-	contentTypeHeader   = "Content-Type"
+	authorizationHeader   = "Authorization"
+	contentMd5Header      = "Content-Md5"
+	contentTypeHeader     = "Content-Type"
+	contentAmzCacheHeader = "x-amz-cache"
+
+	//upstreamRegex = regexp.MustCompile("(^.*).s3.(las1)|(lga1)|(ord1)|.coreweave.com")
+	upstreamRegex = regexp.MustCompile(".s3.")
 )
 
 // Handler is a special handler that re-signs any AWS S3 request and sends it upstream
@@ -36,6 +42,9 @@ type Handler struct {
 
 	// Upstream S3 endpoint URL
 	UpstreamEndpoint string
+
+	// Experimental -- Upstream prefix to swap
+	UpstreamProxyHelper *UpstreamHelper
 
 	// Allowed endpoint, i.e., Host header to accept incoming requests from
 	AllowedSourceEndpoint string
@@ -87,6 +96,35 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 	// Runs async cach syncing every 5 minutes for new users and deleted users
 	authCache.RunSync(5*time.Minute, ctx)
 
+	var upstreamProxyHelper *UpstreamHelper
+	var upstreamEndpoint *string
+	if len(opts.UpstreamEndpoint) != 0 {
+		upstreamEndpoint = &opts.UpstreamEndpoint
+	}
+	var upstreamReplacers []UpstreamReplacer
+	for _, val := range opts.UpstreamMatchers {
+		if upstreamReplacers == nil {
+			upstreamReplacers = make([]UpstreamReplacer, 0)
+		}
+		keys := strings.Split(val, ":")
+		pattern, replacePattern, replaceValue := keys[0], keys[1], keys[2]
+		levelDeep, err := strconv.ParseInt(keys[3], 10, 32)
+		if err != nil {
+			log.Sugar().Errorf("unable to parse levels value from upstream-matchers, invalid: %s", err.Error())
+			return nil, err
+		}
+		upstreamReplacers = append(upstreamReplacers, UpstreamReplacer{
+			MatchPattern:   regexp.MustCompile(pattern),
+			ReplacePattern: regexp.MustCompile(replacePattern),
+			ReplaceWith:    replaceValue,
+			LevelsDeep:     int(levelDeep),
+		})
+
+	}
+	upstreamProxyHelper, err := NewUpstreamHelper(log, upstreamEndpoint, upstreamReplacers)
+	if err != nil {
+		log.Fatal("unable to build upstream helper due to missing params")
+	}
 	handler := &Handler{
 		UpstreamScheme:      scheme,
 		UpstreamEndpoint:    opts.UpstreamEndpoint,
@@ -94,11 +132,14 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 		AuthParser:          parser,
 		AuthCache:           authCache,
 		log:                 log,
+		UpstreamProxyHelper: upstreamProxyHelper,
 	}
 	return handler, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.log.Sugar().Infof("Original request Host: %s", r.Host)
+	h.log.Sugar().Infof("Original Request headers: %v", r.Header)
 	proxyReq, err := h.BuildUpstreamRequest(r)
 	if err != nil {
 		h.log.Sugar().Errorf("unable to proxy request due to error: %s", err.Error())
@@ -122,6 +163,7 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 
 	accessKey := req.Header.Get(authorizationHeader)
 
+	h.log.Sugar().Debugf("original host: %s", req.Host)
 	if accessKey == "" {
 		return nil, errors.New("no access key")
 	}
@@ -173,18 +215,20 @@ func (h *Handler) validateIncomingSourceIP(req *http.Request) error {
 	return nil
 }
 
-func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, region string) (*http.Request, error) {
-	upstreamEndpoint := h.UpstreamEndpoint
-	if len(upstreamEndpoint) == 0 {
-		upstreamEndpoint = fmt.Sprintf("s3.%s.amazonaws.com", region)
-		log.Infof("Using %s as upstream endpoint", upstreamEndpoint)
-	}
+func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, region string) (proxyReq *http.Request, err error) {
 
-	proxyURL := *req.URL
+	proxyURL := req.URL
+	h.log.Sugar().Debugf("URL: %s", proxyURL.String())
+	h.log.Sugar().Debugf("proxyURL: %s", proxyURL.Host)
+	currentHost := req.Host
+	proxyURL.Host, err = h.UpstreamProxyHelper.PrepHost(currentHost)
+	if err != nil {
+		return nil, err
+	}
+	h.log.Sugar().Debugf("Using New Host: %s", proxyURL.Host)
 	proxyURL.Scheme = h.UpstreamScheme
-	proxyURL.Host = upstreamEndpoint
 	proxyURL.RawPath = req.URL.Path
-	proxyReq, err := http.NewRequest(req.Method, proxyURL.String(), req.Body)
+	proxyReq, err = http.NewRequest(req.Method, proxyURL.String(), req.Body)
 	if err != nil {
 		return nil, err
 	}
