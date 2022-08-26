@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cfg"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/handler"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/server"
 	"go.uber.org/zap"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"sync"
 )
 
@@ -23,18 +25,20 @@ func main() {
 	} else {
 		logger, err = zap.NewProduction()
 	}
+	
+	if err != nil {
+		fmt.Printf("unable to build logger: %s", err.Error())
+		os.Exit(2)
+	}
 
 	proxyHandler, err := handler.NewAwsS3ReverseProxy(ctx, logger, opts)
 	if err != nil {
 		logger.Sugar().Fatalf("unable to build proxy handler: %s", err.Error())
 	}
 
-	logger.Sugar().Debugf("Sending requests to upstream Object Storage to endpoint %s://%s.", proxyHandler.UpstreamScheme, proxyHandler.UpstreamEndpoint)
-
 	for _, subnet := range proxyHandler.AllowedSourceSubnet {
 		logger.Sugar().Debugf("Allowing connections from %v.", subnet)
 	}
-	logger.Sugar().Debugf("Accepting incoming requests for this endpoint: %v", proxyHandler.AllowedSourceEndpoint)
 
 	var wrappedHandler http.Handler = proxyHandler
 

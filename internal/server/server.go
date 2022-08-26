@@ -12,14 +12,19 @@ type ProxyServer struct {
 	Cert             string
 	Key              string
 	UpstreamInsecure bool
+	EnableProfiling  bool
 }
 
 func (p *ProxyServer) StartServer(wg *sync.WaitGroup) {
 	wg.Add(1)
 	p.startHttp(wg)
-	if !p.UpstreamInsecure {
+	if p.Cert != "" && p.Key != "" {
 		wg.Add(1)
 		p.startHttps(wg)
+	}
+	if p.EnableProfiling {
+		wg.Add(1)
+		p.startPprof(wg)
 	}
 	wg.Wait()
 }
@@ -43,5 +48,21 @@ func (p *ProxyServer) startHttps(wg *sync.WaitGroup) {
 			p.Log.Error("error in https serve")
 			wg.Done()
 		}
+	}()
+}
+
+func (p *ProxyServer) startPprof(wg *sync.WaitGroup) {
+	go func() {
+		// avoid leaking pprof to the main application http servers
+		pprofMux := http.DefaultServeMux
+		http.DefaultServeMux = http.NewServeMux()
+		// https://golang.org/pkg/net/http/pprof/
+		p.Log.Sugar().Infof("Listening for pprof connections on %s", ":3000")
+		p.Log.Info("Starting up pprof server...")
+		if err := http.ListenAndServe(":3000", pprofMux); err != nil {
+			p.Log.Sugar().Errorf("error on pprof server: %s", err.Error())
+		}
+		p.Log.Info("Shutting down pprof server...")
+		wg.Done()
 	}()
 }

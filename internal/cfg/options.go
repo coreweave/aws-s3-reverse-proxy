@@ -13,7 +13,7 @@ type Options struct {
 	Debug               bool
 	ListenAddr          string
 	MetricsListenAddr   string
-	PprofListenAddr     string
+	EnablePprof         bool
 	AllowedSourceSubnet []string
 	AwsCredentials      []string
 	Region              string
@@ -35,6 +35,7 @@ func NewOptions() Options {
 	var opts Options
 	kingpin.Flag("debug", "enable debug logging").Default("false").Envar("DEBUG").BoolVar(&opts.Debug)
 	kingpin.Flag("insecure", "enable insecure upstream").Default("false").Envar("INSECURE").BoolVar(&opts.UpstreamInsecure)
+	kingpin.Flag("enable-pprof", "enable pprof profiling").Default("false").BoolVar(&opts.EnablePprof)
 	kingpin.Flag("allowed-source-subnet", "allowed source IP addresses with netmask (env - ALLOWED_SOURCE_SUBNET)").Default("127.0.0.1/32").Envar("ALLOWED_SOURCE_SUBNET").StringsVar(&opts.AllowedSourceSubnet)
 	kingpin.Flag("upstream-endpoint", "use this S3 endpoint for upstream connections, instead of public AWS S3 (env - UPSTREAM_ENDPOINT)").Envar("UPSTREAM_ENDPOINT").StringVar(&opts.UpstreamEndpoint)
 	kingpin.Flag("upstream-matchers", "matcher values").Default("object").StringsVar(&opts.UpstreamMatchers)

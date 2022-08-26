@@ -9,7 +9,6 @@ import (
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cfg"
 	"github.com/Kriechi/aws-s3-reverse-proxy/internal/proxy"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
-	log "github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
@@ -23,13 +22,9 @@ import (
 
 var (
 	// Headers
-	authorizationHeader   = "Authorization"
-	contentMd5Header      = "Content-Md5"
-	contentTypeHeader     = "Content-Type"
-	contentAmzCacheHeader = "x-amz-cache"
-
-	//upstreamRegex = regexp.MustCompile("(^.*).s3.(las1)|(lga1)|(ord1)|.coreweave.com")
-	upstreamRegex = regexp.MustCompile(".s3.")
+	authorizationHeader = "Authorization"
+	contentMd5Header    = "Content-Md5"
+	contentTypeHeader   = "Content-Type"
 )
 
 // Handler is a special handler that re-signs any AWS S3 request and sends it upstream
@@ -52,8 +47,8 @@ type Handler struct {
 	// Allowed source IPs and subnets for incoming requests
 	AllowedSourceSubnet []*net.IPNet
 
-	// Reverse Proxy
-	Proxy *httputil.ReverseProxy
+	// Reverse Proxies
+	Proxies map[url.URL]*httputil.ReverseProxy
 
 	//Auth Header parser
 	AuthParser *AccessKeyParser
@@ -125,6 +120,7 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 	if err != nil {
 		log.Fatal("unable to build upstream helper due to missing params")
 	}
+	proxies := make(map[url.URL]*httputil.ReverseProxy)
 	handler := &Handler{
 		UpstreamScheme:      scheme,
 		UpstreamEndpoint:    opts.UpstreamEndpoint,
@@ -133,24 +129,24 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 		AuthCache:           authCache,
 		log:                 log,
 		UpstreamProxyHelper: upstreamProxyHelper,
+		Proxies:             proxies,
 	}
 	return handler, nil
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	h.log.Sugar().Infof("Original request Host: %s", r.Host)
-	h.log.Sugar().Infof("Original Request headers: %v", r.Header)
 	proxyReq, err := h.BuildUpstreamRequest(r)
 	if err != nil {
-		h.log.Sugar().Errorf("unable to proxy request due to error: %s", err.Error())
+		h.log.Sugar().Infow("unable to proxy request due to error", "error", err.Error(), "request", r.Header)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
 	upstreamUrl := url.URL{Scheme: proxyReq.URL.Scheme, Host: proxyReq.Host}
-	upstreamProxy := httputil.NewSingleHostReverseProxy(&upstreamUrl)
-	upstreamProxy.FlushInterval = 1
-	upstreamProxy.ServeHTTP(w, proxyReq)
+	if _, ok := h.Proxies[upstreamUrl]; !ok {
+		h.Proxies[upstreamUrl] = httputil.NewSingleHostReverseProxy(&upstreamUrl)
+		h.Proxies[upstreamUrl].FlushInterval = -1
+	}
+	h.Proxies[upstreamUrl].ServeHTTP(w, proxyReq)
 }
 
 // BuildUpstreamRequest Validates the incoming request and create a new request for an upstream server
@@ -163,7 +159,6 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 
 	accessKey := req.Header.Get(authorizationHeader)
 
-	h.log.Sugar().Debugf("original host: %s", req.Host)
 	if accessKey == "" {
 		return nil, errors.New("no access key")
 	}
@@ -171,29 +166,26 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 	var key string
 
 	if key, err = h.AuthParser.FindAccessKey(accessKey); err != nil {
-		log.Errorf("unable to find an accessKey in aut header: %s", err.Error())
+		h.log.Sugar().Errorf("unable to find an accessKey in aut header: %s", err.Error())
 		return nil, err
 	}
 
 	// Get the AWS Signature signer for this AccessKey
 	signer, err := h.AuthCache.GetRequestSigner(key)
 	if err != nil {
-
+		h.log.Sugar().Errorf("unable to find signer for key: %s", err.Error())
+		return nil, err
 	}
+
 	// Assemble a new upstream request
 	proxyReq, err := h.assembleUpstreamReq(signer, req, "")
 	if err != nil {
-		log.Infof("Unable to assemble request")
+		h.log.Sugar().Infof("Unable to assemble request: %s", err.Error())
 		return nil, err
 	}
 
 	// Disable Go's "Transfer-Encoding: chunked" madness
 	proxyReq.ContentLength = req.ContentLength
-
-	if log.GetLevel() == log.DebugLevel {
-		proxyReqDump, _ := httputil.DumpRequest(proxyReq, false)
-		log.Debugf("Proxying request: %v", string(proxyReqDump))
-	}
 
 	return proxyReq, nil
 }
@@ -240,8 +232,8 @@ func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, regi
 	}
 
 	// Sign the upstream request
-	if err := proxy.SignRequest(signer, proxyReq, region); err != nil {
-		log.Infof("Unable to Sing request")
+	if err = proxy.SignRequest(signer, proxyReq, region); err != nil {
+		h.log.Sugar().Infof("Unable to Sing request")
 		return nil, err
 	}
 

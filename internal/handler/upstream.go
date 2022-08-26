@@ -10,11 +10,6 @@ import (
 var errNoHostMatch = errors.New("unable to modify host with upstream changes")
 var errMissingUpstreamParameters = errors.New("missing valid parameters to format upstream requests")
 
-var (
-	regexPrefix  = "(^.*)."
-	regexPostFix = ".(las1)|(lga1)|(ord1)|.coreweave.com"
-)
-
 type UpstreamReplacer struct {
 	LevelsDeep     int
 	MatchPattern   *regexp.Regexp
@@ -55,7 +50,6 @@ func NewUpstreamHelper(log *zap.Logger, upstreamEndpoint *string, replacers []Up
 }
 
 func (u UpstreamHelper) PrepHost(originHost string) (result string, err error) {
-	u.log.Sugar().Infof("origin host: %s", originHost)
 	if u.upstreamEndpoint != nil {
 		return *u.upstreamEndpoint, nil
 	}
@@ -65,6 +59,6 @@ func (u UpstreamHelper) PrepHost(originHost string) (result string, err error) {
 			return result, nil
 		}
 	}
-	u.log.Debug("did not match the origin format, err no host")
+	u.log.Sugar().Infow("did not match the origin format, err no host", "host", originHost)
 	return "", err
 }
