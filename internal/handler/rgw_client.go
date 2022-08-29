@@ -2,8 +2,8 @@ package handler
 
 import (
 	"context"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal"
 	"github.com/ceph/go-ceph/rgw/admin"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal"
 	"net/http"
 )
 

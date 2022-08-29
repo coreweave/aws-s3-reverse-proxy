@@ -2,9 +2,9 @@ package cache
 
 import (
 	"errors"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal/mocks"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal/mocks"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"

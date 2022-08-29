@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"errors"
 	"fmt"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal"
 	"regexp"
 	"strings"
 )
@@ -12,8 +12,6 @@ var (
 	accessKeySplitter    = "="
 	altAccessKeyRegexp   = regexp.MustCompile("AWS ([a-zA-Z0-9]+)")
 	altAccessKeySplitter = " "
-
-	errNoAccessKeyFound = errors.New("no access key found in Authorization header")
 )
 
 type AccessKeyPattern struct {
@@ -33,7 +31,7 @@ func (a *AccessKeyPattern) Get(value string) (string, error) {
 	if found, err := a.match(value); err == nil {
 		return strings.Split(found, a.splitter)[1], nil
 	}
-	return "", errNoAccessKeyFound
+	return "", internal.ErrNoAccessKeyFound
 }
 
 func NewAccessKeyParser() *AccessKeyParser {
@@ -58,5 +56,5 @@ func (a *AccessKeyParser) FindAccessKey(authHeader string) (string, error) {
 			return found, nil
 		}
 	}
-	return "", errNoAccessKeyFound
+	return "", internal.ErrNoAccessKeyFound
 }

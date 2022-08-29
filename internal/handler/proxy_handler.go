@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cache"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal/cfg"
-	"github.com/Kriechi/aws-s3-reverse-proxy/internal/proxy"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal/cfg"
+	"github.com/coreweave/aws-s3-reverse-proxy/internal/proxy"
 	"go.uber.org/zap"
 	"net"
 	"net/http"
@@ -17,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 )
 
 var (
@@ -58,12 +56,12 @@ type Handler struct {
 }
 
 // NewAwsS3ReverseProxy parses all options and creates a new HTTP Handler
-func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options) (*Handler, error) {
+func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options, cache internal.AuthCache, https bool) (*Handler, error) {
 
-	scheme := "https"
-	if opts.UpstreamInsecure {
-		log.Debug("upstream is insecure..setting to http")
-		scheme = "http"
+	scheme := "http"
+
+	if https {
+		scheme = "https"
 	}
 
 	var parsedAllowedSourceSubnet []*net.IPNet
@@ -80,16 +78,6 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 		log.Sugar().Errorf("missing one of the rgw endpoint variables, please ensure they are set")
 		return nil, errors.New("missing required variable")
 	}
-	adminClient := NewRgwAdminClient(opts.RgwAdminAccessKey, opts.RgwAdminSecretKey, opts.RgwAdminEndpoint)
-	authCache := cache.NewAuthCache(adminClient, log, time.Duration(opts.ExpireCacheMinutes)*time.Minute, time.Duration(opts.EvictCacheMinutes)*time.Minute)
-	//Load initial key state
-	if err := authCache.Load(); err != nil {
-		log.Sugar().Errorf("unable to load initial rgw user keys due to: %s", err.Error())
-		return nil, err
-	}
-
-	// Runs async cach syncing every 5 minutes for new users and deleted users
-	authCache.RunSync(5*time.Minute, ctx)
 
 	var upstreamProxyHelper *UpstreamHelper
 	var upstreamEndpoint *string
@@ -126,7 +114,7 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 		UpstreamEndpoint:    opts.UpstreamEndpoint,
 		AllowedSourceSubnet: parsedAllowedSourceSubnet,
 		AuthParser:          parser,
-		AuthCache:           authCache,
+		AuthCache:           cache,
 		log:                 log,
 		UpstreamProxyHelper: upstreamProxyHelper,
 		Proxies:             proxies,
@@ -137,13 +125,17 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyReq, err := h.BuildUpstreamRequest(r)
 	if err != nil {
-		h.log.Sugar().Infow("unable to proxy request due to error", "error", err.Error(), "request", r.Header)
+		if !errors.Is(err, internal.ErrNoAccessKeyFound) {
+			h.log.Sugar().Infow("unable to proxy request due to error", "error", err.Error(), "request", r.Header)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		//Dumb unauthed requests
 		dumpReq, _ := httputil.DumpRequest(r, false)
-		h.log.Sugar().Infow("dumped request", "request", string(dumpReq))
-		w.WriteHeader(http.StatusBadRequest)
-		return
+		h.log.Sugar().Infow("Unauthenticated request proxied", "request", string(dumpReq))
 	}
 	upstreamUrl := url.URL{Scheme: proxyReq.URL.Scheme, Host: proxyReq.Host}
+	h.log.Sugar().Debugf("upstreamURL found: %s://%s", upstreamUrl.Scheme, upstreamUrl.Host)
 	if _, ok := h.Proxies[upstreamUrl]; !ok {
 		h.Proxies[upstreamUrl] = httputil.NewSingleHostReverseProxy(&upstreamUrl)
 		h.Proxies[upstreamUrl].FlushInterval = -1
@@ -153,6 +145,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // BuildUpstreamRequest Validates the incoming request and create a new request for an upstream server
 func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error) {
+
+	signRequest := false
+	var signer *v4.Signer
+
 	// Ensure the request was sent from an allowed IP address
 	err := h.validateIncomingSourceIP(req)
 	if err != nil {
@@ -161,26 +157,23 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 
 	accessKey := req.Header.Get(authorizationHeader)
 
-	if accessKey == "" {
-		return nil, errors.New("no access key")
-	}
-
-	var key string
-
-	if key, err = h.AuthParser.FindAccessKey(accessKey); err != nil {
-		h.log.Sugar().Errorf("unable to find an accessKey in aut header: %s", err.Error())
-		return nil, err
-	}
-
-	// Get the AWS Signature signer for this AccessKey
-	signer, err := h.AuthCache.GetRequestSigner(key)
-	if err != nil {
-		h.log.Sugar().Errorf("unable to find signer for key: %s", err.Error())
-		return nil, err
+	if accessKey != "" {
+		signRequest = true
+		var key string
+		if key, err = h.AuthParser.FindAccessKey(accessKey); err != nil {
+			h.log.Sugar().Errorf("unable to find an accessKey in aut header: %s", err.Error())
+			return nil, err
+		}
+		// Get the AWS Signature signer for this AccessKey
+		signer, err = h.AuthCache.GetRequestSigner(key)
+		if err != nil {
+			h.log.Sugar().Errorf("unable to find signer for key: %s", err.Error())
+			return nil, err
+		}
 	}
 
 	// Assemble a new upstream request
-	proxyReq, err := h.assembleUpstreamReq(signer, req, "")
+	proxyReq, err := h.assembleUpstreamReq(signer, req, "", signRequest)
 	if err != nil {
 		h.log.Sugar().Infof("Unable to assemble request: %s", err.Error())
 		return nil, err
@@ -209,7 +202,7 @@ func (h *Handler) validateIncomingSourceIP(req *http.Request) error {
 	return nil
 }
 
-func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, region string) (proxyReq *http.Request, err error) {
+func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, region string, sign bool) (proxyReq *http.Request, err error) {
 
 	proxyURL := req.URL
 	h.log.Sugar().Debugf("URL: %s", proxyURL.String())
@@ -232,11 +225,13 @@ func (h *Handler) assembleUpstreamReq(signer *v4.Signer, req *http.Request, regi
 	if val, ok := req.Header[contentMd5Header]; ok {
 		proxyReq.Header[contentMd5Header] = val
 	}
-
-	// Sign the upstream request
-	if err = proxy.SignRequest(signer, proxyReq, region); err != nil {
-		h.log.Sugar().Infof("Unable to Sing request")
-		return nil, err
+	// Only sign if we have the key and a signed request.
+	if sign {
+		// Sign the upstream request
+		if err = proxy.SignRequest(signer, proxyReq, region); err != nil {
+			h.log.Sugar().Infof("Unable to Sing request")
+			return nil, err
+		}
 	}
 
 	// Add origin headers after request is signed (no overwrite)

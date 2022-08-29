@@ -8,6 +8,7 @@ import (
 
 type ProxyServer struct {
 	Handler          http.Handler
+	HttpsHandler     http.Handler
 	Log              *zap.Logger
 	Cert             string
 	Key              string
@@ -44,7 +45,7 @@ func (p *ProxyServer) startHttps(wg *sync.WaitGroup) {
 	p.Log.Info("Starting https server...")
 	go func() {
 		p.Log.Info("Starting up https on listen address :8090")
-		if err := http.ListenAndServeTLS(":8090", p.Cert, p.Key, p.Handler); err != nil {
+		if err := http.ListenAndServeTLS(":8090", p.Cert, p.Key, p.HttpsHandler); err != nil {
 			p.Log.Error("error in https serve")
 			wg.Done()
 		}

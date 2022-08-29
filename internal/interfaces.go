@@ -4,9 +4,12 @@ package internal
 
 import (
 	"context"
+	"errors"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"time"
 )
+
+var ErrNoAccessKeyFound = errors.New("no access key found in Authorization header")
 
 type AdminClient interface {
 	LoadUserCredentials() (map[string]string, error)
