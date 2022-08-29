@@ -138,6 +138,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxyReq, err := h.BuildUpstreamRequest(r)
 	if err != nil {
 		h.log.Sugar().Infow("unable to proxy request due to error", "error", err.Error(), "request", r.Header)
+		dumpReq, _ := httputil.DumpRequest(r, false)
+		h.log.Sugar().Infow("dumped request", "request", string(dumpReq))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
