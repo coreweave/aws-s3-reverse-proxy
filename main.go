@@ -33,7 +33,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	adminClient := handler.NewRgwAdminClient(opts.RgwAdminAccessKey, opts.RgwAdminSecretKey, opts.RgwAdminEndpoint)
+	adminClient := handler.NewRgwAdminClient(opts.RgwAdminAccessKeys, opts.RgwAdminSecretKeys, opts.RgwAdminEndpoints)
 	authCache := cache.NewAuthCache(adminClient, logger, time.Duration(opts.ExpireCacheMinutes)*time.Minute, time.Duration(opts.EvictCacheMinutes)*time.Minute)
 	//Load initial key state
 	if err = authCache.Load(); err != nil {

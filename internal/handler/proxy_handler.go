@@ -74,7 +74,7 @@ func NewAwsS3ReverseProxy(ctx context.Context, log *zap.Logger, opts cfg.Options
 	}
 
 	parser := NewAccessKeyParser()
-	if opts.RgwAdminEndpoint == "" || opts.RgwAdminAccessKey == "" || opts.RgwAdminSecretKey == "" {
+	if opts.RgwAdminEndpoints == "" || opts.RgwAdminAccessKeys == "" || opts.RgwAdminSecretKeys == "" {
 		log.Sugar().Errorf("missing one of the rgw endpoint variables, please ensure they are set")
 		return nil, errors.New("missing required variable")
 	}
@@ -127,12 +127,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if !errors.Is(err, internal.ErrNoAccessKeyFound) {
 			h.log.Sugar().Infow("unable to proxy request due to error", "error", err.Error(), "request", r.Header)
+			dumpReq, _ := httputil.DumpRequest(r, false)
+			h.log.Sugar().Infow("Unauthenticated request proxied", "request", string(dumpReq))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		//Dumb unauthed requests
-		dumpReq, _ := httputil.DumpRequest(r, false)
-		h.log.Sugar().Infow("Unauthenticated request proxied", "request", string(dumpReq))
+
 	}
 	upstreamUrl := url.URL{Scheme: proxyReq.URL.Scheme, Host: proxyReq.Host}
 	h.log.Sugar().Debugf("upstreamURL found: %s://%s", upstreamUrl.Scheme, upstreamUrl.Host)
