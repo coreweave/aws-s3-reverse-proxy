@@ -25,9 +25,9 @@ type Options struct {
 	DisableSSL          bool
 	ExpireCacheMinutes  int
 	EvictCacheMinutes   int
-	RgwAdminEndpoint    string
-	RgwAdminAccessKey   string
-	RgwAdminSecretKey   string
+	RgwAdminEndpoints   string
+	RgwAdminAccessKeys  string
+	RgwAdminSecretKeys  string
 }
 
 // NewOptions defines and parses the raw command line arguments
@@ -43,9 +43,9 @@ func NewOptions() Options {
 	kingpin.Flag("key-file", "path to the private key file (env - KEY_FILE)").Envar("KEY_FILE").Default("").StringVar(&opts.KeyFile)
 	kingpin.Flag("cache-expire", "time in minutes to expire the cache").Default("5").IntVar(&opts.ExpireCacheMinutes)
 	kingpin.Flag("cache-evict", "time in minutes to evict the cache").Default("10").IntVar(&opts.EvictCacheMinutes)
-	kingpin.Flag("rgw-admin-endpoint", "the rgw admin endpoint to hit").Default("").Default("https://s3.lga1.coreweave.com").Envar(RgwAdminEndpointEnvVar).StringVar(&opts.RgwAdminEndpoint)
-	kingpin.Flag("rgw-admin-secret", "the rgw admin secret key").Default("").Envar(RgwAdminSecretEnvVar).StringVar(&opts.RgwAdminSecretKey)
-	kingpin.Flag("rgw-admin-access", "the rgw admin access key").Default("").Envar(RgwAdminAccessEnvVar).StringVar(&opts.RgwAdminAccessKey)
+	kingpin.Flag("rgw-admin-endpoints", "the rgw admin endpoint to hit").Default("").Default("https://s3.lga1.coreweave.com").Envar(RgwAdminEndpointEnvVar).StringVar(&opts.RgwAdminEndpoints)
+	kingpin.Flag("rgw-admin-secrets", "the rgw admin secret key").Default("").Envar(RgwAdminSecretEnvVar).StringVar(&opts.RgwAdminSecretKeys)
+	kingpin.Flag("rgw-admin-access", "the rgw admin access key").Default("").Envar(RgwAdminAccessEnvVar).StringVar(&opts.RgwAdminAccessKeys)
 
 	kingpin.Parse()
 	return opts
