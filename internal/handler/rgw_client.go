@@ -22,7 +22,7 @@ func NewRgwAdminClient(adminAccess, adminSecret, endpoint string) internal.Admin
 	}
 	var clients []*admin.API
 	for i := 0; i < len(endpoints); i++ {
-		goCephClient, err := admin.New(endpoint, adminAccess, adminSecret, http.DefaultClient)
+		goCephClient, err := admin.New(endpoints[i], keys[i], secrets[i], http.DefaultClient)
 		if err != nil {
 			panic(err)
 		}
