@@ -161,7 +161,7 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 		signRequest = true
 		var key string
 		if key, err = h.AuthParser.FindAccessKey(accessKey); err != nil {
-			h.log.Sugar().Errorf("unable to find an accessKey in aut header: %s", err.Error())
+			h.log.Sugar().Errorf("unable to find an accessKey in auth header: %s", err.Error())
 			return nil, err
 		}
 		// Get the AWS Signature signer for this AccessKey

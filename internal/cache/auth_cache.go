@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/cenkalti/backoff"
 	"github.com/coreweave/aws-s3-reverse-proxy/internal"
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
@@ -20,14 +21,20 @@ type AuthCache struct {
 	rgwAdmin  internal.AdminClient
 	userCache *cache.Cache
 	log       *zap.Logger
+	boff      backoff.BackOff
 }
 
 func NewAuthCache(rgwAdmin internal.AdminClient, log *zap.Logger, expireTime time.Duration, evictTime time.Duration) *AuthCache {
 	ch := cache.New(expireTime, evictTime) // Don't expire
+	boff := backoff.NewExponentialBackOff()
+	boff.MaxElapsedTime = time.Duration(1) * time.Second
+	boff.MaxInterval = time.Duration(250) * time.Millisecond
+	boff.InitialInterval = time.Duration(5) * time.Millisecond
 	return &AuthCache{
 		rgwAdmin:  rgwAdmin,
 		userCache: ch,
 		log:       log,
+		boff:      boff,
 	}
 }
 
@@ -50,10 +57,20 @@ func (a *AuthCache) RunSync(interval time.Duration, ctx context.Context) {
 }
 
 func (a *AuthCache) GetRequestSigner(accessKeyId string) (*v4.Signer, error) {
-	if signer, found := a.userCache.Get(accessKeyId); found {
-		return signer.(*v4.Signer), nil
+	var foundSigner *v4.Signer
+	// Under Load this call to the cache returns false for accessKeys randomly. Simple retry logic fixes.
+	retryFn := func() error {
+		if signer, found := a.userCache.Get(accessKeyId); found {
+			foundSigner = signer.(*v4.Signer)
+			return nil
+		}
+		return errNoAccessKeyInCache
 	}
-	return nil, errNoAccessKeyInCache
+
+	if err := backoff.Retry(retryFn, a.boff); err != nil {
+		return nil, err
+	}
+	return foundSigner, nil
 }
 
 func (a *AuthCache) Load() (err error) {

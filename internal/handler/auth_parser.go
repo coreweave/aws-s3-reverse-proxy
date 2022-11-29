@@ -56,5 +56,5 @@ func (a *AccessKeyParser) FindAccessKey(authHeader string) (string, error) {
 			return found, nil
 		}
 	}
-	return "", internal.ErrNoAccessKeyFound
+	return "", internal.ErrNoAuthHeaderFound
 }
