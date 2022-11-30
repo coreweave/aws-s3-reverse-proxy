@@ -27,7 +27,23 @@ func (p *ProxyServer) StartServer(wg *sync.WaitGroup) {
 		wg.Add(1)
 		p.startPprof(wg)
 	}
+	wg.Add(1)
+	p.startHealthCheck(wg)
 	wg.Wait()
+}
+
+func (p *ProxyServer) startHealthCheck(wg *sync.WaitGroup) {
+	p.Log.Info("Starting health check endpoint")
+	go func() {
+		if err := http.ListenAndServe(":8888", http.HandlerFunc(
+			func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("ok"))
+			},
+		)); err != nil {
+			p.Log.Error("error in healthcheck server")
+			wg.Done()
+		}
+	}()
 }
 
 func (p *ProxyServer) startHttp(wg *sync.WaitGroup) {
