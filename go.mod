@@ -1,7 +1,9 @@
 module github.com/coreweave/aws-s3-reverse-proxy
 
 require (
+	github.com/VictoriaMetrics/fastcache v1.12.0 // indirect
 	github.com/aws/aws-sdk-go v1.44.67
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/ceph/go-ceph v0.17.0
 	github.com/golang/mock v1.6.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible

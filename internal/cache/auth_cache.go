@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/VictoriaMetrics/fastcache"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/coreweave/aws-s3-reverse-proxy/internal"
-	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 	"time"
 )
@@ -18,15 +18,15 @@ var (
 
 type AuthCache struct {
 	rgwAdmin  internal.AdminClient
-	userCache *cache.Cache
+	userCache *fastcache.Cache
 	log       *zap.Logger
 }
 
-func NewAuthCache(rgwAdmin internal.AdminClient, log *zap.Logger, expireTime time.Duration, evictTime time.Duration) *AuthCache {
-	ch := cache.New(expireTime, evictTime) // Don't expire
+func NewAuthCache(rgwAdmin internal.AdminClient, log *zap.Logger) *AuthCache {
+	fc := fastcache.New(4000000000) //4GB
 	return &AuthCache{
 		rgwAdmin:  rgwAdmin,
-		userCache: ch,
+		userCache: fc,
 		log:       log,
 	}
 }
@@ -50,8 +50,11 @@ func (a *AuthCache) RunSync(interval time.Duration, ctx context.Context) {
 }
 
 func (a *AuthCache) GetRequestSigner(accessKeyId string) (*v4.Signer, error) {
-	if signer, found := a.userCache.Get(accessKeyId); found {
-		return signer.(*v4.Signer), nil
+	if secretKey := a.userCache.Get(nil, []byte(accessKeyId)); secretKey != nil {
+		return v4.NewSigner(credentials.NewStaticCredentialsFromCreds(credentials.Value{
+			AccessKeyID:     accessKeyId,
+			SecretAccessKey: string(secretKey),
+		})), nil
 	}
 	return nil, errNoAccessKeyInCache
 }
@@ -61,11 +64,7 @@ func (a *AuthCache) Load() (err error) {
 	if vals, err = a.rgwAdmin.LoadUserCredentials(); err == nil {
 		a.log.Debug(fmt.Sprintf("loading %d keys from rgw..", len(vals)))
 		for k, v := range vals {
-			signer := v4.NewSigner(credentials.NewStaticCredentialsFromCreds(credentials.Value{
-				AccessKeyID:     k,
-				SecretAccessKey: v,
-			}))
-			a.userCache.Set(k, signer, 0)
+			a.userCache.Set([]byte(k), []byte(v))
 		}
 		return nil
 	}

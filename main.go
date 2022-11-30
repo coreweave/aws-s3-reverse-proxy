@@ -34,7 +34,7 @@ func main() {
 	}
 
 	adminClient := handler.NewRgwAdminClient(opts.RgwAdminAccessKeys, opts.RgwAdminSecretKeys, opts.RgwAdminEndpoints)
-	authCache := cache.NewAuthCache(adminClient, logger, time.Duration(opts.ExpireCacheMinutes)*time.Minute, time.Duration(opts.EvictCacheMinutes)*time.Minute)
+	authCache := cache.NewAuthCache(adminClient, logger)
 	//Load initial key state
 	if err = authCache.Load(); err != nil {
 		logger.Sugar().Errorf("unable to load initial rgw user keys due to: %s", err.Error())
@@ -73,4 +73,5 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	srv.StartServer(wg)
+
 }

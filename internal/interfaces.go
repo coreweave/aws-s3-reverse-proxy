@@ -10,6 +10,7 @@ import (
 )
 
 var ErrNoAccessKeyFound = errors.New("no access key found in Authorization header")
+var ErrNoAuthHeaderFound = errors.New("no auth header found between listed formats")
 
 type AdminClient interface {
 	LoadUserCredentials() (map[string]string, error)
