@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 	"testing"
-	"time"
 )
 
 func TestAuthCacheLoad(t *testing.T) {
@@ -23,7 +22,7 @@ func TestAuthCacheLoad(t *testing.T) {
 	mClient := mocks.NewMockAdminClient(ctrl)
 	mClient.EXPECT().LoadUserCredentials().Times(1).Return(rgwValues, nil)
 
-	ch := NewAuthCache(mClient, log, 5*time.Minute, 10*time.Minute)
+	ch := NewAuthCache(mClient, log)
 
 	err := ch.Load()
 	assert.NoError(t, err)
@@ -36,7 +35,7 @@ func TestAuthCacheLoadError(t *testing.T) {
 	mClient := mocks.NewMockAdminClient(ctrl)
 	mClient.EXPECT().LoadUserCredentials().Times(1).Return(nil, expectedError)
 
-	ch := NewAuthCache(mClient, log, 5*time.Minute, 10*time.Minute)
+	ch := NewAuthCache(mClient, log)
 
 	err := ch.Load()
 	assert.EqualError(t, expectedError, err.Error())
@@ -58,7 +57,7 @@ func TestAuthCacheGetCredential(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mClient := mocks.NewMockAdminClient(ctrl)
 	mClient.EXPECT().LoadUserCredentials().Times(1).Return(rgwValues, nil)
-	ch := NewAuthCache(mClient, log, 5*time.Minute, 10*time.Minute)
+	ch := NewAuthCache(mClient, log)
 	_ = ch.Load()
 
 	// Test
