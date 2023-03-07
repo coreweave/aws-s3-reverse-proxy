@@ -149,17 +149,12 @@ func (h *Handler) BuildUpstreamRequest(req *http.Request) (*http.Request, error)
 	signRequest := false
 	var signer *v4.Signer
 
-	// Ensure the request was sent from an allowed IP address
-	err := h.validateIncomingSourceIP(req)
-	if err != nil {
-		return nil, err
-	}
-
 	accessKey := req.Header.Get(authorizationHeader)
 
 	if accessKey != "" {
 		signRequest = true
 		var key string
+		var err error
 		if key, err = h.AuthParser.FindAccessKey(accessKey); err != nil {
 			h.log.Sugar().Errorf("unable to find an accessKey in auth header: %s", err.Error())
 			return nil, err
